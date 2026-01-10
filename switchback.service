@@ -1,0 +1,13 @@
+[Unit]
+Description=Switchback - Solar-based dynamic wallpaper switcher
+After=hyprpaper.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/switchback
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=hyprland-session.target

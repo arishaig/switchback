@@ -12,6 +12,7 @@ depends=(
     'python-astral'
     'python-yaml'
     'python-pytz'
+    'python-pillow'
     'hyprpaper'
 )
 optdepends=(
@@ -29,18 +30,22 @@ sha256sums=('SKIP')  # Update with actual checksum
 
 build() {
     cd "$srcdir/$pkgname-$pkgver"
-    python -m build --wheel --no-isolation
+    /usr/bin/python -m build --wheel --no-isolation
 }
 
 package() {
     cd "$srcdir/$pkgname-$pkgver"
 
     # Install Python package
-    python -m installer --destdir="$pkgdir" dist/*.whl
+    /usr/bin/python -m installer --destdir="$pkgdir" dist/*.whl
 
     # Install systemd service
     install -Dm644 switchback.service \
         "$pkgdir/usr/lib/systemd/user/switchback.service"
+
+    # Install desktop file
+    install -Dm644 switchback-gui.desktop \
+        "$pkgdir/usr/share/applications/switchback-gui.desktop"
 
     # Install example config
     install -Dm644 config.yaml \

@@ -7,10 +7,11 @@ from gi.repository import Gtk, Gio, GdkPixbuf
 class WallpaperChooser(Gtk.Box):
     """File chooser button for selecting wallpaper images with preview."""
 
-    def __init__(self, initial_path=None):
+    def __init__(self, initial_path=None, on_change_callback=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
 
         self.path = Path(initial_path) if initial_path else None
+        self.on_change_callback = on_change_callback
 
         # Top row: label and button
         top_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -92,6 +93,10 @@ class WallpaperChooser(Gtk.Box):
                 self.path = Path(file.get_path())
                 self.label.set_text(str(self.path))
                 self._update_preview()
+
+                # Call the change callback if provided
+                if self.on_change_callback:
+                    self.on_change_callback(self.path)
 
         dialog.destroy()
 

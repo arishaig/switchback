@@ -1,12 +1,14 @@
 """Main window for Switchback GUI."""
 
 import yaml
+import subprocess
 from datetime import datetime
 from pathlib import Path
-from gi.repository import Gtk, GLib
+from gi.repository import Gtk, GLib, GObject
 from switchback.config import Config, get_default_config_path
 from switchback.sun_calculator import SunCalculator
 from switchback.time_period import get_current_period, TimePeriod
+from switchback.wallpaper_manager import WallpaperManager
 from switchback.gui.widgets import WallpaperChooser
 
 
@@ -241,7 +243,10 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
         night_label = Gtk.Label(label="Night 🌙")
         night_label.set_xalign(0)
         night_box.append(night_label)
-        self.night_chooser = WallpaperChooser(self.config.wallpapers.get('night'))
+        self.night_chooser = WallpaperChooser(
+            self.config.wallpapers.get('night'),
+            on_change_callback=lambda path: self.on_wallpaper_changed_and_check('night', path)
+        )
         night_box.append(self.night_chooser)
         wallpaper_hbox.append(night_box)
 
@@ -250,7 +255,10 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
         morning_label = Gtk.Label(label="Morning 🌅")
         morning_label.set_xalign(0)
         morning_box.append(morning_label)
-        self.morning_chooser = WallpaperChooser(self.config.wallpapers.get('morning'))
+        self.morning_chooser = WallpaperChooser(
+            self.config.wallpapers.get('morning'),
+            on_change_callback=lambda path: self.on_wallpaper_changed_and_check('morning', path)
+        )
         morning_box.append(self.morning_chooser)
         wallpaper_hbox.append(morning_box)
 
@@ -259,12 +267,23 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
         afternoon_label = Gtk.Label(label="Afternoon ☀️")
         afternoon_label.set_xalign(0)
         afternoon_box.append(afternoon_label)
-        self.afternoon_chooser = WallpaperChooser(self.config.wallpapers.get('afternoon'))
+        self.afternoon_chooser = WallpaperChooser(
+            self.config.wallpapers.get('afternoon'),
+            on_change_callback=lambda path: self.on_wallpaper_changed_and_check('afternoon', path)
+        )
         afternoon_box.append(self.afternoon_chooser)
         wallpaper_hbox.append(afternoon_box)
 
         wallpaper_box.append(wallpaper_hbox)
         vbox.append(wallpaper_box)
+
+        # Unsaved changes indicator
+        self.unsaved_label = Gtk.Label()
+        self.unsaved_label.set_markup("<span color='#f39c12'>⚠ Unsaved changes</span>")
+        self.unsaved_label.set_visible(False)
+        self.unsaved_label.set_halign(Gtk.Align.START)
+        self.unsaved_label.set_margin_top(12)
+        vbox.append(self.unsaved_label)
 
         # Buttons
         button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -281,6 +300,11 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
         button_box.append(save_button)
 
         vbox.append(button_box)
+
+        # Connect change handlers for location fields
+        self.lat_entry.connect("changed", lambda w: self.check_for_changes())
+        self.lon_entry.connect("changed", lambda w: self.check_for_changes())
+        self.tz_entry.connect("changed", lambda w: self.check_for_changes())
 
         scrolled.set_child(vbox)
         return scrolled
@@ -404,6 +428,27 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
         cache_box.append(clear_cache_button)
 
         vbox.append(cache_box)
+
+        # Unsaved changes indicator (shared with config page)
+        if hasattr(self, 'unsaved_label'):
+            unsaved_indicator = Gtk.Label()
+            unsaved_indicator.set_markup("<span color='#f39c12'>⚠ Unsaved changes</span>")
+            unsaved_indicator.set_visible(False)
+            unsaved_indicator.set_halign(Gtk.Align.START)
+            unsaved_indicator.set_margin_top(12)
+            # Bind visibility to the config page indicator
+            self.unsaved_label.bind_property(
+                "visible",
+                unsaved_indicator,
+                "visible",
+                GObject.BindingFlags.SYNC_CREATE | GObject.BindingFlags.BIDIRECTIONAL
+            )
+            vbox.append(unsaved_indicator)
+
+        # Connect change handlers for transitions settings
+        self.transitions_switch.connect("state-set", lambda w, s: self.check_for_changes())
+        self.granularity_scale.connect("value-changed", lambda w: self.check_for_changes())
+        self.cache_switch.connect("state-set", lambda w, s: self.check_for_changes())
 
         scrolled.set_child(vbox)
         return scrolled
@@ -565,6 +610,9 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
             with open(self.config_path) as f:
                 self.original_config_data = f.read()
 
+            # Clear unsaved changes indicator
+            self.unsaved_label.set_visible(False)
+
             # Show success dialog
             dialog = Gtk.MessageDialog(
                 transient_for=self,
@@ -601,6 +649,96 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
         self.transitions_switch.set_active(self.config.transitions_enabled)
         self.granularity_scale.set_value(self.config.transitions_granularity)
         self.cache_switch.set_active(self.config.transitions_cache_blends)
+
+        # Check for changes (should hide indicator since we reverted)
+        self.check_for_changes()
+
+    def check_for_changes(self):
+        """Check if GUI values differ from saved config and show/hide indicator."""
+        if not self.config:
+            return
+
+        has_changes = False
+
+        # Check location fields
+        try:
+            if float(self.lat_entry.get_text()) != self.config.latitude:
+                has_changes = True
+        except ValueError:
+            pass
+
+        try:
+            if float(self.lon_entry.get_text()) != self.config.longitude:
+                has_changes = True
+        except ValueError:
+            pass
+
+        if self.tz_entry.get_text().strip() != self.config.timezone:
+            has_changes = True
+
+        # Check wallpaper paths
+        night_path = self.night_chooser.get_path()
+        morning_path = self.morning_chooser.get_path()
+        afternoon_path = self.afternoon_chooser.get_path()
+
+        if night_path != self.config.wallpapers.get('night'):
+            has_changes = True
+        if morning_path != self.config.wallpapers.get('morning'):
+            has_changes = True
+        if afternoon_path != self.config.wallpapers.get('afternoon'):
+            has_changes = True
+
+        # Check transition settings if available
+        if hasattr(self, 'transitions_switch'):
+            if self.transitions_switch.get_active() != self.config.transitions_enabled:
+                has_changes = True
+            if int(self.granularity_scale.get_value()) != self.config.transitions_granularity:
+                has_changes = True
+            if self.cache_switch.get_active() != self.config.transitions_cache_blends:
+                has_changes = True
+
+        # Show/hide indicator
+        self.unsaved_label.set_visible(has_changes)
+
+    def on_wallpaper_changed_and_check(self, period, path):
+        """Handle wallpaper change: apply if current period, then check for changes."""
+        self.on_wallpaper_changed(period, path)
+        self.check_for_changes()
+
+    def on_wallpaper_changed(self, period, path):
+        """Called when a wallpaper is changed in the GUI."""
+        if not self.sun_calc:
+            return
+
+        # Get current period
+        now = datetime.now(self.sun_calc.tz)
+        sun_times = self.sun_calc.get_sun_times(now)
+        current_period = get_current_period(sun_times, now)
+
+        # If the changed wallpaper is for the current period, auto-apply
+        if current_period.value == period:
+            try:
+                # Apply the wallpaper directly using WallpaperManager
+                wallpaper_mgr = WallpaperManager(self.config.monitor)
+
+                if not wallpaper_mgr.wait_for_hyprpaper(max_wait=5):
+                    self.show_error_dialog(
+                        "Hyprpaper Not Running",
+                        "Hyprpaper must be running to set wallpapers."
+                    )
+                    return
+
+                if not wallpaper_mgr.set_wallpaper(path):
+                    self.show_error_dialog(
+                        "Failed to Apply Wallpaper",
+                        f"Could not set wallpaper to: {path.name}"
+                    )
+
+            except Exception as e:
+                self.show_error_dialog(
+                    "Error Applying Wallpaper",
+                    f"An error occurred:\n{str(e)}"
+                )
 
     def on_clear_cache_clicked(self, button):
         """Clear the blend cache."""

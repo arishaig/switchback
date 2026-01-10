@@ -46,6 +46,7 @@ setup(
     data_files=[
         ("share/switchback", ["config.yaml"]),
         ("lib/systemd/user", ["switchback.service"]),
+        ("share/applications", ["switchback-gui.desktop"]),
     ],
     classifiers=[
         "Development Status :: 4 - Beta",

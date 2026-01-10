@@ -18,7 +18,7 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
 
         # Window properties
         self.set_title("Switchback Configuration")
-        self.set_default_size(700, 550)
+        self.set_default_size(900, 650)
 
         # Load config
         self.config_path = get_default_config_path()
@@ -231,38 +231,39 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
         wallpaper_title.set_xalign(0)
         wallpaper_box.append(wallpaper_title)
 
-        wallpaper_grid = Gtk.Grid()
-        wallpaper_grid.set_column_spacing(12)
-        wallpaper_grid.set_row_spacing(6)
-        wallpaper_grid.set_margin_start(12)
+        # Use a horizontal box to display wallpaper choosers side by side
+        wallpaper_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        wallpaper_hbox.set_margin_start(12)
+        wallpaper_hbox.set_homogeneous(True)
 
         # Night wallpaper
-        night_label = Gtk.Label(label="Night 🌙:")
+        night_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        night_label = Gtk.Label(label="Night 🌙")
         night_label.set_xalign(0)
+        night_box.append(night_label)
         self.night_chooser = WallpaperChooser(self.config.wallpapers.get('night'))
-        wallpaper_grid.attach(night_label, 0, 0, 1, 1)
-        wallpaper_grid.attach(self.night_chooser, 1, 0, 1, 1)
+        night_box.append(self.night_chooser)
+        wallpaper_hbox.append(night_box)
 
         # Morning wallpaper
-        morning_label = Gtk.Label(label="Morning 🌅:")
+        morning_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        morning_label = Gtk.Label(label="Morning 🌅")
         morning_label.set_xalign(0)
+        morning_box.append(morning_label)
         self.morning_chooser = WallpaperChooser(self.config.wallpapers.get('morning'))
-        wallpaper_grid.attach(morning_label, 0, 1, 1, 1)
-        wallpaper_grid.attach(self.morning_chooser, 1, 1, 1, 1)
+        morning_box.append(self.morning_chooser)
+        wallpaper_hbox.append(morning_box)
 
         # Afternoon wallpaper
-        afternoon_label = Gtk.Label(label="Afternoon ☀️:")
+        afternoon_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        afternoon_label = Gtk.Label(label="Afternoon ☀️")
         afternoon_label.set_xalign(0)
+        afternoon_box.append(afternoon_label)
         self.afternoon_chooser = WallpaperChooser(self.config.wallpapers.get('afternoon'))
-        wallpaper_grid.attach(afternoon_label, 0, 2, 1, 1)
-        wallpaper_grid.attach(self.afternoon_chooser, 1, 2, 1, 1)
+        afternoon_box.append(self.afternoon_chooser)
+        wallpaper_hbox.append(afternoon_box)
 
-        # Make choosers expand
-        self.night_chooser.set_hexpand(True)
-        self.morning_chooser.set_hexpand(True)
-        self.afternoon_chooser.set_hexpand(True)
-
-        wallpaper_box.append(wallpaper_grid)
+        wallpaper_box.append(wallpaper_hbox)
         vbox.append(wallpaper_box)
 
         # Buttons

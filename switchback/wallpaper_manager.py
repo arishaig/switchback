@@ -44,7 +44,22 @@ class WallpaperManager:
             )
             return True
         except subprocess.CalledProcessError as e:
-            logger.error(f"Command failed: {' '.join(cmd)}\n{e.stderr}")
+            error_msg = (e.stderr + e.stdout).lower() if e.stderr or e.stdout else ""
+
+            # Check if IPC is disabled
+            if 'disabled' in error_msg or ('ipc' in error_msg and 'off' in error_msg):
+                logger.error(
+                    "Hyprpaper IPC appears to be disabled.\n"
+                    "To enable IPC:\n"
+                    "  1. Edit ~/.config/hypr/hyprpaper.conf\n"
+                    "  2. Change 'ipc = off' to 'ipc = on'\n"
+                    "  3. Restart hyprpaper: systemctl --user restart hyprpaper.service"
+                )
+            # Check if it's an unsupported command (e.g., preload in hyprpaper 0.8.x)
+            elif 'unknown' in error_msg and 'request' in error_msg:
+                logger.debug(f"Command not supported (ignored): {cmd[2] if len(cmd) > 2 else 'unknown'}")
+            else:
+                logger.error(f"Command failed: {' '.join(cmd)}\n{e.stderr or e.stdout}")
             return False
         except subprocess.TimeoutExpired:
             logger.error(f"Command timed out: {' '.join(cmd)}")
@@ -91,24 +106,27 @@ class WallpaperManager:
         """
         Preload wallpaper into memory.
 
+        Note: In hyprpaper 0.8.x, preload may not be supported via IPC.
+        The wallpaper command will load images automatically, so this is optional.
+
         Args:
             path: Path to wallpaper file
 
         Returns:
-            True if successful, False otherwise
+            True if successful, False otherwise (non-fatal)
         """
         if path in self.preloaded:
             logger.debug(f"Already preloaded: {path.name}")
             return True
 
-        logger.info(f"Preloading wallpaper: {path.name}")
+        logger.debug(f"Attempting to preload wallpaper: {path.name}")
         success = self._run_command(['hyprctl', 'hyprpaper', 'preload', str(path)])
 
         if success:
             self.preloaded.add(path)
             logger.debug(f"Successfully preloaded: {path.name}")
         else:
-            logger.error(f"Failed to preload: {path.name}")
+            logger.debug(f"Preload not supported or failed: {path.name} (non-fatal)")
 
         return success
 
@@ -126,10 +144,9 @@ class WallpaperManager:
             logger.error(f"Wallpaper file not found: {path}")
             return False
 
-        # Preload if not already loaded
+        # Try to preload (optional, may not be supported in hyprpaper 0.8.x)
         if path not in self.preloaded:
-            if not self.preload(path):
-                return False
+            self.preload(path)  # Non-fatal if it fails
 
         # Set wallpaper: format is "monitor,path"
         wallpaper_arg = f"{self.monitor},{path}"

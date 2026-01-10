@@ -28,10 +28,19 @@ setup(
         "astral>=3.2",
         "PyYAML>=6.0",
         "pytz>=2024.1",
+        "Pillow>=10.0.0",
     ],
+    extras_require={
+        "gui": [
+            "PyGObject>=3.48.0",
+        ],
+    },
     entry_points={
         "console_scripts": [
             "switchback=switchback.main:cli",
+        ],
+        "gui_scripts": [
+            "switchback-gui=switchback.gui.application:main",
         ],
     },
     data_files=[

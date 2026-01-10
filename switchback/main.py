@@ -11,6 +11,8 @@ from switchback.config import Config, get_default_config_path
 from switchback.sun_calculator import SunCalculator
 from switchback.wallpaper_manager import WallpaperManager
 from switchback.time_period import TimePeriod, get_current_period
+from switchback.blender import ImageBlender, BlendCache
+from switchback.transition_tracker import TransitionTracker
 
 
 logger = logging.getLogger(__name__)
@@ -46,13 +48,27 @@ def run_daemon(config: Config, verbose: bool = False):
         logger.error("Hyprpaper is not running. Please start hyprpaper first.")
         sys.exit(1)
 
-    # Preload all wallpapers if configured
-    if config.preload_all:
+    # Preload all wallpapers if configured (only for hard transition mode)
+    if config.preload_all and not config.transitions_enabled:
         wallpaper_paths = list(config.wallpapers.values())
         if not wallpaper_mgr.preload_all(wallpaper_paths):
             logger.warning("Some wallpapers failed to preload, but continuing...")
 
-    # Set initial wallpaper
+    # Initialize transition components if enabled
+    blender = None
+    cache = None
+    tracker = None
+
+    if config.transitions_enabled:
+        logger.info("Gradual transitions enabled")
+        blender = ImageBlender()
+        if config.transitions_cache_blends:
+            cache_dir = Path(config.transitions_cache_dir).expanduser()
+            cache = BlendCache(cache_dir)
+            logger.info(f"Blend cache enabled at: {cache_dir}")
+        tracker = TransitionTracker(sun_calc)
+
+    # Get current period
     now = datetime.now(sun_calc.tz)
     sun_times = sun_calc.get_sun_times(now)
     current_period = get_current_period(sun_times, now)
@@ -62,10 +78,44 @@ def run_daemon(config: Config, verbose: bool = False):
     logger.info(f"Solar noon: {sun_times['noon'].strftime('%H:%M')}")
     logger.info(f"Sunset: {sun_times['sunset'].strftime('%H:%M')}")
 
-    wallpaper_path = config.get_wallpaper(current_period.value)
-    if not wallpaper_mgr.set_wallpaper(wallpaper_path):
-        logger.error("Failed to set initial wallpaper")
-        sys.exit(1)
+    # Set initial wallpaper
+    if config.transitions_enabled:
+        # In gradual mode, set blended wallpaper based on current time
+        period_start, period_end = tracker.get_period_boundaries(now, current_period)
+        blend_ratio = blender.calculate_blend_ratio(now, period_start, period_end)
+
+        from_period, to_period = tracker.get_transition_wallpapers(current_period)
+        from_path = config.get_wallpaper(from_period)
+        to_path = config.get_wallpaper(to_period)
+
+        logger.info(f"Initial blend: {from_period} → {to_period} ({blend_ratio:.2f})")
+
+        # Try cache first
+        wallpaper_path = None
+        if cache:
+            cache_key = cache.get_cache_key(from_path, to_path, blend_ratio)
+            wallpaper_path = cache.get_cached_blend(cache_key, from_path, to_path)
+
+        # Blend if not cached
+        if not wallpaper_path:
+            logger.info("Generating blended wallpaper...")
+            blended_image = blender.blend_images(from_path, to_path, blend_ratio)
+            if cache:
+                wallpaper_path = cache.save_blend(blended_image, cache_key, from_path, to_path)
+            else:
+                temp_path = Path("/tmp/switchback_blend.jpg")
+                blended_image.save(temp_path, "JPEG", quality=95)
+                wallpaper_path = temp_path
+
+        if not wallpaper_mgr.set_wallpaper(wallpaper_path):
+            logger.error("Failed to set initial wallpaper")
+            sys.exit(1)
+    else:
+        # In hard mode, set wallpaper for current period
+        wallpaper_path = config.get_wallpaper(current_period.value)
+        if not wallpaper_mgr.set_wallpaper(wallpaper_path):
+            logger.error("Failed to set initial wallpaper")
+            sys.exit(1)
 
     last_period = current_period
 
@@ -77,28 +127,60 @@ def run_daemon(config: Config, verbose: bool = False):
             sun_times = sun_calc.get_sun_times(now)
             current_period = get_current_period(sun_times, now)
 
-            # Check if period changed
-            if current_period != last_period:
-                logger.info(f"Period changed: {last_period.value} → {current_period.value}")
-                wallpaper_path = config.get_wallpaper(current_period.value)
+            if config.transitions_enabled:
+                # GRADUAL TRANSITION MODE
+                period_start, period_end = tracker.get_period_boundaries(now, current_period)
+                blend_ratio = blender.calculate_blend_ratio(now, period_start, period_end)
 
-                if wallpaper_mgr.set_wallpaper(wallpaper_path):
-                    last_period = current_period
-                else:
-                    logger.error("Failed to change wallpaper, will retry...")
+                from_period, to_period = tracker.get_transition_wallpapers(current_period)
+                from_path = config.get_wallpaper(from_period)
+                to_path = config.get_wallpaper(to_period)
 
-            # Calculate next transition time
-            next_transition = sun_calc.get_next_transition_time(now, current_period.value)
-            sleep_seconds = (next_transition - now).total_seconds()
+                logger.debug(f"Blend: {from_period} → {to_period} ({blend_ratio:.2f})")
 
-            # Add small buffer and ensure minimum sleep time
-            sleep_seconds = max(60, min(sleep_seconds + 5, config.check_interval_fallback))
+                # Try cache first
+                wallpaper_path = None
+                if cache:
+                    cache_key = cache.get_cache_key(from_path, to_path, blend_ratio)
+                    wallpaper_path = cache.get_cached_blend(cache_key, from_path, to_path)
 
-            logger.debug(
-                f"Next transition: {next_transition.strftime('%H:%M')} "
-                f"(sleeping {int(sleep_seconds)}s)"
-            )
+                # Blend if not cached
+                if not wallpaper_path:
+                    logger.debug("Generating blended wallpaper...")
+                    blended_image = blender.blend_images(from_path, to_path, blend_ratio)
+                    if cache:
+                        wallpaper_path = cache.save_blend(blended_image, cache_key, from_path, to_path)
+                    else:
+                        temp_path = Path("/tmp/switchback_blend.jpg")
+                        blended_image.save(temp_path, "JPEG", quality=95)
+                        wallpaper_path = temp_path
 
+                wallpaper_mgr.set_wallpaper(wallpaper_path)
+
+                # Sleep until next granularity interval
+                sleep_seconds = config.transitions_granularity
+
+            else:
+                # HARD TRANSITION MODE (original behavior)
+
+                # Check if period changed
+                if current_period != last_period:
+                    logger.info(f"Period changed: {last_period.value} → {current_period.value}")
+                    wallpaper_path = config.get_wallpaper(current_period.value)
+
+                    if wallpaper_mgr.set_wallpaper(wallpaper_path):
+                        last_period = current_period
+                    else:
+                        logger.error("Failed to change wallpaper, will retry...")
+
+                # Calculate next transition time
+                next_transition = sun_calc.get_next_transition_time(now, current_period.value)
+                sleep_seconds = (next_transition - now).total_seconds()
+
+                # Add small buffer and ensure minimum sleep time
+                sleep_seconds = max(60, min(sleep_seconds + 5, config.check_interval_fallback))
+
+            logger.debug(f"Sleeping for {int(sleep_seconds)}s")
             time.sleep(sleep_seconds)
 
         except KeyboardInterrupt:
@@ -126,7 +208,7 @@ def run_once(config: Config, period: str = None):
         sys.exit(1)
 
     if period:
-        # Set specific period
+        # Set specific period (always use hard transition for specific period)
         if period not in config.wallpapers:
             logger.error(f"Unknown period: {period}")
             sys.exit(1)
@@ -141,7 +223,48 @@ def run_once(config: Config, period: str = None):
         current_period = get_current_period(sun_times, now)
 
         logger.info(f"Current period: {current_period.value}")
-        wallpaper_path = config.get_wallpaper(current_period.value)
+
+        # Check if gradual transitions are enabled
+        if config.transitions_enabled:
+            logger.info("Gradual transitions enabled")
+            if config.transitions_cache_blends:
+                cache_dir = Path(config.transitions_cache_dir).expanduser()
+                logger.info(f"Blend cache enabled at: {cache_dir}")
+
+            # Initialize transition components
+            blender = ImageBlender()
+            cache = BlendCache(cache_dir) if config.transitions_cache_blends else None
+            tracker = TransitionTracker(sun_calc)
+
+            # Get period boundaries and calculate blend ratio
+            period_start, period_end = tracker.get_period_boundaries(now, current_period)
+            blend_ratio = blender.calculate_blend_ratio(now, period_start, period_end)
+
+            from_period, to_period = tracker.get_transition_wallpapers(current_period)
+            from_path = config.get_wallpaper(from_period)
+            to_path = config.get_wallpaper(to_period)
+
+            logger.info(f"Initial blend: {from_period} → {to_period} ({blend_ratio:.2f})")
+
+            # Try cache first
+            wallpaper_path = None
+            if cache:
+                cache_key = cache.get_cache_key(from_path, to_path, blend_ratio)
+                wallpaper_path = cache.get_cached_blend(cache_key, from_path, to_path)
+
+            # Blend if not cached
+            if not wallpaper_path:
+                logger.info("Generating blended wallpaper...")
+                blended_image = blender.blend_images(from_path, to_path, blend_ratio)
+                if cache:
+                    wallpaper_path = cache.save_blend(blended_image, cache_key, from_path, to_path)
+                else:
+                    temp_path = Path("/tmp/switchback_blend.jpg")
+                    blended_image.save(temp_path, "JPEG", quality=95)
+                    wallpaper_path = temp_path
+        else:
+            # Hard transition mode
+            wallpaper_path = config.get_wallpaper(current_period.value)
 
     if wallpaper_mgr.set_wallpaper(wallpaper_path):
         logger.info("Wallpaper set successfully")
@@ -211,6 +334,13 @@ settings:
   check_interval_fallback: 300  # Safety check interval (seconds)
   preload_all: true             # Preload all wallpapers at startup
   monitor: ""                   # Monitor name (empty = all monitors)
+
+  # Gradual wallpaper transitions (optional)
+  transitions:
+    enabled: false                # Enable gradual transitions between wallpapers
+    granularity: 3600             # How often to update wallpaper blend (seconds, default: 1 hour)
+    cache_blends: true            # Cache blended images for better performance
+    cache_dir: "~/.cache/switchback"  # Where to store cached blends
 """
 
     config_path.write_text(template)

@@ -14,6 +14,10 @@ depends=(
     'python-pytz'
     'hyprpaper'
 )
+optdepends=(
+    'python-gobject: for GUI configuration tool'
+    'gtk4: for GUI configuration tool'
+)
 makedepends=(
     'python-setuptools'
     'python-build'

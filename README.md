@@ -44,6 +44,28 @@ or
 yay -S switchback
 ```
 
+### Optional: Install GUI
+
+Switchback includes an optional GTK4 GUI for configuration. To install GUI support:
+
+```bash
+# From source
+pip install -e .[gui]
+
+# Or install system package
+sudo pacman -S python-gobject
+
+# Launch GUI
+switchback-gui
+```
+
+The GUI provides:
+- Live status display (current period, sun times, next transition)
+- Visual configuration editor (no need to manually edit YAML)
+- File choosers for selecting wallpapers
+
+**Note:** The GUI requires `python-gobject` and GTK4. On Arch Linux, install with `pacman -S python-gobject gtk4`.
+
 ## Configuration
 
 ### 1. Enable IPC in hyprpaper

@@ -20,6 +20,12 @@ class Config:
     preload_all: bool = True
     monitor: str = ""
 
+    # Transition settings
+    transitions_enabled: bool = False
+    transitions_granularity: int = 3600
+    transitions_cache_blends: bool = True
+    transitions_cache_dir: str = "~/.cache/switchback"
+
     @classmethod
     def load(cls, config_path: Path) -> "Config":
         """
@@ -96,6 +102,23 @@ class Config:
         # Optional settings
         settings = data.get('settings', {})
 
+        # Transition settings (nested under settings.transitions)
+        transitions = settings.get('transitions', {})
+        transitions_enabled = transitions.get('enabled', False)
+        transitions_granularity = transitions.get('granularity', 3600)
+        transitions_cache_blends = transitions.get('cache_blends', True)
+        transitions_cache_dir = transitions.get('cache_dir', '~/.cache/switchback')
+
+        # Validate transition settings
+        if transitions_granularity < 60:
+            raise ValueError(
+                f"Transition granularity must be at least 60 seconds, got: {transitions_granularity}"
+            )
+        if transitions_granularity > 86400:
+            raise ValueError(
+                f"Transition granularity cannot exceed 86400 seconds (24 hours), got: {transitions_granularity}"
+            )
+
         return cls(
             latitude=latitude,
             longitude=longitude,
@@ -104,6 +127,10 @@ class Config:
             check_interval_fallback=settings.get('check_interval_fallback', 300),
             preload_all=settings.get('preload_all', True),
             monitor=settings.get('monitor', ''),
+            transitions_enabled=transitions_enabled,
+            transitions_granularity=transitions_granularity,
+            transitions_cache_blends=transitions_cache_blends,
+            transitions_cache_dir=transitions_cache_dir,
         )
 
     def get_wallpaper(self, period: str) -> Path:

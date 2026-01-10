@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Switchback
+GenericName=Wallpaper Manager
+Comment=Solar-based dynamic wallpaper configuration
+Exec=switchback-gui
+Icon=preferences-desktop-wallpaper
+Terminal=false
+Categories=Settings;DesktopSettings;GTK;
+Keywords=wallpaper;hyprland;solar;

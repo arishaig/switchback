@@ -67,7 +67,7 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
             buttons=Gtk.ButtonsType.OK,
             text=title
         )
-        dialog.format_secondary_text(message)
+        dialog.set_property("secondary-text", message)
         dialog.connect("response", lambda d, r: d.destroy())
         dialog.show()
 
@@ -255,7 +255,8 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
         night_box.append(night_label)
         self.night_chooser = WallpaperChooser(
             self.config.wallpapers.get('night') if self.config.wallpapers else None,
-            on_change_callback=lambda path: self.on_wallpaper_changed_and_check('night', path)
+            on_change_callback=lambda path: self.on_wallpaper_changed_and_check('night', path),
+            parent=self
         )
         night_box.append(self.night_chooser)
         wallpaper_hbox.append(night_box)
@@ -267,7 +268,8 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
         morning_box.append(morning_label)
         self.morning_chooser = WallpaperChooser(
             self.config.wallpapers.get('morning') if self.config.wallpapers else None,
-            on_change_callback=lambda path: self.on_wallpaper_changed_and_check('morning', path)
+            on_change_callback=lambda path: self.on_wallpaper_changed_and_check('morning', path),
+            parent=self
         )
         morning_box.append(self.morning_chooser)
         wallpaper_hbox.append(morning_box)
@@ -279,7 +281,8 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
         afternoon_box.append(afternoon_label)
         self.afternoon_chooser = WallpaperChooser(
             self.config.wallpapers.get('afternoon') if self.config.wallpapers else None,
-            on_change_callback=lambda path: self.on_wallpaper_changed_and_check('afternoon', path)
+            on_change_callback=lambda path: self.on_wallpaper_changed_and_check('afternoon', path),
+            parent=self
         )
         afternoon_box.append(self.afternoon_chooser)
         wallpaper_hbox.append(afternoon_box)
@@ -960,7 +963,7 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
                 buttons=Gtk.ButtonsType.OK,
                 text="Configuration Saved"
             )
-            dialog.format_secondary_text(
+            dialog.set_property("secondary-text",
                 "The configuration has been saved successfully.\n\n"
                 "Restart the switchback daemon to apply changes:\n"
                 "  systemctl --user restart switchback.service"
@@ -1168,6 +1171,7 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
         dialog = Gtk.FileChooserDialog(
             title="Choose Logo",
             action=Gtk.FileChooserAction.OPEN,
+            transient_for=self,
         )
 
         dialog.add_button("_Cancel", Gtk.ResponseType.CANCEL)
@@ -1572,7 +1576,7 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
             buttons=Gtk.ButtonsType.OK,
             text="Cache Cleared"
         )
-        dialog.format_secondary_text(
+        dialog.set_property("secondary-text",
             "All cached blended wallpapers have been removed.\n"
             "They will be regenerated as needed."
         )

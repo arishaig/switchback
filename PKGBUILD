@@ -1,7 +1,7 @@
 # Maintainer: Your Name <your.email@example.com>
 
 pkgname=switchback
-pkgver=1.1.1
+pkgver=1.1.2
 pkgrel=1
 pkgdesc="Solar-based dynamic wallpaper switcher for hyprpaper"
 arch=('any')

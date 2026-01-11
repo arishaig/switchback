@@ -73,19 +73,20 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
 
     def build_ui(self):
         """Build the main UI with tabs."""
+        # Create main container
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+
         # Create stack for tabs
         stack = Gtk.Stack()
         stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
+        stack.set_vexpand(True)  # Allow stack to expand vertically
 
         # Create stack switcher
         stack_switcher = Gtk.StackSwitcher()
         stack_switcher.set_stack(stack)
         stack_switcher.set_halign(Gtk.Align.CENTER)
 
-        # Add pages
-        status_page = self.create_status_page()
-        stack.add_titled(status_page, "status", "Status")
-
+        # Add pages (no status page anymore)
         config_page = self.create_config_page()
         stack.add_titled(config_page, "config", "Configuration")
 
@@ -100,82 +101,85 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
         header.set_title_widget(stack_switcher)
         self.set_titlebar(header)
 
-        # Set stack as window content
-        self.set_child(stack)
+        # Add stack to main box (it will expand to fill available space)
+        main_box.append(stack)
 
-    def create_status_page(self):
-        """Create the status display page."""
-        # Main box
-        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        vbox.set_margin_start(24)
-        vbox.set_margin_end(24)
-        vbox.set_margin_top(24)
-        vbox.set_margin_bottom(24)
+        # Create status footer
+        status_footer = self.create_status_footer()
+        status_footer.set_vexpand(False)  # Footer should not expand
+        main_box.append(status_footer)
+
+        # Set main box as window content
+        self.set_child(main_box)
+
+    def create_status_footer(self):
+        """Create a compact status footer shown on all tabs."""
+        # Main footer box with separator
+        footer_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+
+        # Add separator
+        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        footer_container.append(separator)
+
+        # Footer content box
+        footer_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=24)
+        footer_box.set_margin_start(12)
+        footer_box.set_margin_end(12)
+        footer_box.set_margin_top(8)
+        footer_box.set_margin_bottom(8)
+        footer_box.add_css_class("toolbar")
 
         if not self.config:
             label = Gtk.Label(label="Configuration not loaded")
-            vbox.append(label)
-            return vbox
+            footer_box.append(label)
+            footer_container.append(footer_box)
+            return footer_container
 
-        # Current period section
-        period_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        period_title = Gtk.Label(label="<b>Current Status</b>")
-        period_title.set_use_markup(True)
-        period_title.set_xalign(0)
-        period_box.append(period_title)
-
+        # Current period
         self.period_label = Gtk.Label(label="")
         self.period_label.set_xalign(0)
-        self.period_label.set_margin_start(12)
-        period_box.append(self.period_label)
+        footer_box.append(self.period_label)
 
-        vbox.append(period_box)
+        # Separator
+        sep1 = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+        footer_box.append(sep1)
 
-        # Sun times section
-        sun_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        sun_title = Gtk.Label(label="<b>Sun Times Today</b>")
-        sun_title.set_use_markup(True)
-        sun_title.set_xalign(0)
-        sun_box.append(sun_title)
+        # Sun times (compact)
+        sun_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
 
-        times_grid = Gtk.Grid()
-        times_grid.set_column_spacing(12)
-        times_grid.set_row_spacing(6)
-        times_grid.set_margin_start(12)
-
-        # Labels
+        sunrise_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        sunrise_box.append(Gtk.Label(label="↑"))
         self.sunrise_label = Gtk.Label(label="")
-        self.sunrise_label.set_xalign(0)
+        sunrise_box.append(self.sunrise_label)
+        sun_box.append(sunrise_box)
+
+        noon_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        noon_box.append(Gtk.Label(label="⌘"))
         self.noon_label = Gtk.Label(label="")
-        self.noon_label.set_xalign(0)
+        noon_box.append(self.noon_label)
+        sun_box.append(noon_box)
+
+        sunset_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        sunset_box.append(Gtk.Label(label="↓"))
         self.sunset_label = Gtk.Label(label="")
-        self.sunset_label.set_xalign(0)
+        sunset_box.append(self.sunset_label)
+        sun_box.append(sunset_box)
 
-        times_grid.attach(Gtk.Label(label="Sunrise:"), 0, 0, 1, 1)
-        times_grid.attach(self.sunrise_label, 1, 0, 1, 1)
-        times_grid.attach(Gtk.Label(label="Solar Noon:"), 0, 1, 1, 1)
-        times_grid.attach(self.noon_label, 1, 1, 1, 1)
-        times_grid.attach(Gtk.Label(label="Sunset:"), 0, 2, 1, 1)
-        times_grid.attach(self.sunset_label, 1, 2, 1, 1)
+        footer_box.append(sun_box)
 
-        sun_box.append(times_grid)
-        vbox.append(sun_box)
+        # Separator
+        sep2 = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+        footer_box.append(sep2)
 
-        # Next transition section
-        next_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        next_title = Gtk.Label(label="<b>Next Transition</b>")
-        next_title.set_use_markup(True)
-        next_title.set_xalign(0)
-        next_box.append(next_title)
-
+        # Next transition
+        next_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        next_box.append(Gtk.Label(label="Next:"))
         self.next_label = Gtk.Label(label="")
-        self.next_label.set_xalign(0)
-        self.next_label.set_margin_start(12)
         next_box.append(self.next_label)
+        footer_box.append(next_box)
 
-        vbox.append(next_box)
-
-        return vbox
+        footer_container.append(footer_box)
+        return footer_container
 
     def create_config_page(self):
         """Create the configuration editing page."""
@@ -246,7 +250,7 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
 
         # Night wallpaper
         night_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        night_label = Gtk.Label(label="Night 🌙")
+        night_label = Gtk.Label(label="Night ●")
         night_label.set_xalign(0)
         night_box.append(night_label)
         self.night_chooser = WallpaperChooser(
@@ -258,7 +262,7 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
 
         # Morning wallpaper
         morning_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        morning_label = Gtk.Label(label="Morning 🌅")
+        morning_label = Gtk.Label(label="Morning ◐")
         morning_label.set_xalign(0)
         morning_box.append(morning_label)
         self.morning_chooser = WallpaperChooser(
@@ -270,7 +274,7 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
 
         # Afternoon wallpaper
         afternoon_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        afternoon_label = Gtk.Label(label="Afternoon ☀️")
+        afternoon_label = Gtk.Label(label="Afternoon ○")
         afternoon_label.set_xalign(0)
         afternoon_box.append(afternoon_label)
         self.afternoon_chooser = WallpaperChooser(
@@ -662,17 +666,17 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
 
         # Night background
         self.night_bg_color = ColorButton(night_bg, lambda c: self.on_generated_changed_and_check())
-        bg_colors_grid.attach(Gtk.Label(label="Night 🌙:"), 0, 0, 1, 1)
+        bg_colors_grid.attach(Gtk.Label(label="Night ●:"), 0, 0, 1, 1)
         bg_colors_grid.attach(self.night_bg_color, 1, 0, 1, 1)
 
         # Morning background
         self.morning_bg_color = ColorButton(morning_bg, lambda c: self.on_generated_changed_and_check())
-        bg_colors_grid.attach(Gtk.Label(label="Morning 🌅:"), 0, 1, 1, 1)
+        bg_colors_grid.attach(Gtk.Label(label="Morning ◐:"), 0, 1, 1, 1)
         bg_colors_grid.attach(self.morning_bg_color, 1, 1, 1, 1)
 
         # Afternoon background
         self.afternoon_bg_color = ColorButton(afternoon_bg, lambda c: self.on_generated_changed_and_check())
-        bg_colors_grid.attach(Gtk.Label(label="Afternoon ☀️:"), 0, 2, 1, 1)
+        bg_colors_grid.attach(Gtk.Label(label="Afternoon ○:"), 0, 2, 1, 1)
         bg_colors_grid.attach(self.afternoon_bg_color, 1, 2, 1, 1)
 
         bg_colors_box.append(bg_colors_grid)
@@ -701,17 +705,17 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
 
         # Night logo
         self.night_logo_color = ColorButton(night_logo, lambda c: self.on_generated_changed_and_check())
-        logo_colors_grid.attach(Gtk.Label(label="Night 🌙:"), 0, 0, 1, 1)
+        logo_colors_grid.attach(Gtk.Label(label="Night ●:"), 0, 0, 1, 1)
         logo_colors_grid.attach(self.night_logo_color, 1, 0, 1, 1)
 
         # Morning logo
         self.morning_logo_color = ColorButton(morning_logo, lambda c: self.on_generated_changed_and_check())
-        logo_colors_grid.attach(Gtk.Label(label="Morning 🌅:"), 0, 1, 1, 1)
+        logo_colors_grid.attach(Gtk.Label(label="Morning ◐:"), 0, 1, 1, 1)
         logo_colors_grid.attach(self.morning_logo_color, 1, 1, 1, 1)
 
         # Afternoon logo
         self.afternoon_logo_color = ColorButton(afternoon_logo, lambda c: self.on_generated_changed_and_check())
-        logo_colors_grid.attach(Gtk.Label(label="Afternoon ☀️:"), 0, 2, 1, 1)
+        logo_colors_grid.attach(Gtk.Label(label="Afternoon ○:"), 0, 2, 1, 1)
         logo_colors_grid.attach(self.afternoon_logo_color, 1, 2, 1, 1)
 
         logo_colors_box.append(logo_colors_grid)
@@ -781,27 +785,26 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
             period = get_current_period(sun_times, now)
 
             # Update period
-            emoji = self.get_period_emoji(period)
+            symbol = self.get_period_emoji(period)
             self.period_label.set_markup(
-                f"<span size='large'>{period.value.title()} {emoji}</span>"
+                f"<b>{period.value.title()} {symbol}</b>"
             )
 
-            # Update sun times
-            self.sunrise_label.set_text(sun_times['sunrise'].strftime('%H:%M:%S'))
-            self.noon_label.set_text(sun_times['noon'].strftime('%H:%M:%S'))
-            self.sunset_label.set_text(sun_times['sunset'].strftime('%H:%M:%S'))
+            # Update sun times (compact, no seconds)
+            self.sunrise_label.set_text(sun_times['sunrise'].strftime('%H:%M'))
+            self.noon_label.set_text(sun_times['noon'].strftime('%H:%M'))
+            self.sunset_label.set_text(sun_times['sunset'].strftime('%H:%M'))
 
             # Update next transition
             next_transition = self.sun_calc.get_next_transition_time(now, period.value)
             time_until = next_transition - now
             hours = int(time_until.total_seconds() // 3600)
             minutes = int((time_until.total_seconds() % 3600) // 60)
-            seconds = int(time_until.total_seconds() % 60)
 
             next_period = self.get_next_period(period)
             self.next_label.set_text(
                 f"{next_period.title()} at {next_transition.strftime('%H:%M')} "
-                f"(in {hours}h {minutes}m {seconds}s)"
+                f"(in {hours}h {minutes}m)"
             )
 
         except Exception as e:
@@ -811,13 +814,13 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
         return True  # Continue updating
 
     def get_period_emoji(self, period):
-        """Get emoji for a time period."""
-        emojis = {
-            TimePeriod.NIGHT: "🌙",
-            TimePeriod.MORNING: "🌅",
-            TimePeriod.AFTERNOON: "☀️"
+        """Get symbol for a time period."""
+        symbols = {
+            TimePeriod.NIGHT: "●",      # Black circle
+            TimePeriod.MORNING: "◐",    # Circle with left half black
+            TimePeriod.AFTERNOON: "○"   # White circle
         }
-        return emojis.get(period, "")
+        return symbols.get(period, "")
 
     def get_next_period(self, current_period):
         """Get the next period name."""

@@ -10,7 +10,7 @@ class WallpaperChooser(Gtk.Box):
     def __init__(self, initial_path=None, on_change_callback=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
 
-        self.path = Path(initial_path) if initial_path else None
+        self.path = Path(initial_path).expanduser() if initial_path else None
         self.on_change_callback = on_change_callback
 
         # Top row: label and button
@@ -108,7 +108,7 @@ class WallpaperChooser(Gtk.Box):
 
     def set_path(self, path):
         """Set the current path."""
-        self.path = Path(path) if path else None
+        self.path = Path(path).expanduser() if path else None
         label_text = str(self.path) if self.path else "No file selected"
         self.label.set_text(label_text)
         self._update_preview()

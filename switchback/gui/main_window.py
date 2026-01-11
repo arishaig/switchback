@@ -750,6 +750,11 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
         vbox.append(button_box)
 
         scrolled.set_child(vbox)
+
+        # Update logo previews if we loaded an initial logo from config
+        if self.logo_path:
+            self._update_logo_previews()
+
         return scrolled
 
     def _format_granularity(self, scale, value):

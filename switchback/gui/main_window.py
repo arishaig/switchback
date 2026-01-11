@@ -834,6 +834,85 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
         else:
             return "Night"
 
+    def _apply_current_wallpaper(self):
+        """Apply wallpaper for current time period based on config."""
+        from switchback.wallpaper_manager import WallpaperManager
+        from switchback.wallpaper_source import create_wallpaper_source, GeneratedWallpaperSource
+        from switchback.time_period import get_current_period
+        from switchback.blender import ImageBlender, BlendCache
+        from switchback.transition_tracker import TransitionTracker
+        from pathlib import Path
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        try:
+            # Initialize components
+            wallpaper_mgr = WallpaperManager(self.config.monitor)
+
+            # Check if hyprpaper is running
+            if not wallpaper_mgr.wait_for_hyprpaper(max_wait=2):
+                logger.warning("Hyprpaper is not running, cannot apply wallpaper")
+                return
+
+            wallpaper_source = create_wallpaper_source(self.config)
+
+            # Get current time and period
+            now = datetime.now(self.sun_calc.tz)
+            sun_times = self.sun_calc.get_sun_times(now)
+            current_period = get_current_period(sun_times, now)
+
+            # Apply wallpaper based on transition settings
+            if self.config.transitions_enabled:
+                # Gradual transitions enabled
+                blender = ImageBlender()
+                cache = None
+                if self.config.transitions_cache_blends:
+                    cache_dir = Path(self.config.transitions_cache_dir).expanduser()
+                    cache = BlendCache(cache_dir)
+
+                tracker = TransitionTracker(self.sun_calc)
+                period_start, period_end = tracker.get_period_boundaries(now, current_period)
+                blend_ratio = blender.calculate_blend_ratio(now, period_start, period_end)
+
+                from_period, to_period, blend_ratio = tracker.get_transition_wallpapers(current_period, blend_ratio)
+
+                # Check if using generated wallpapers
+                if isinstance(wallpaper_source, GeneratedWallpaperSource):
+                    wallpaper_path = wallpaper_source.get_blended_wallpaper(from_period, to_period, blend_ratio)
+                else:
+                    # For file wallpapers, blend images
+                    from_path = wallpaper_source.get_wallpaper(from_period)
+                    to_path = wallpaper_source.get_wallpaper(to_period)
+
+                    # Try cache first
+                    wallpaper_path = None
+                    if cache:
+                        cache_key = cache.get_cache_key(from_path, to_path, blend_ratio)
+                        wallpaper_path = cache.get_cached_blend(cache_key, from_path, to_path)
+
+                    # Blend if not cached
+                    if not wallpaper_path:
+                        blended_image = blender.blend_images(from_path, to_path, blend_ratio)
+                        if cache:
+                            wallpaper_path = cache.save_blend(blended_image, cache_key, from_path, to_path)
+                        else:
+                            temp_path = Path("/tmp/switchback_blend.jpg")
+                            blended_image.save(temp_path, "JPEG", quality=98, subsampling=0)
+                            wallpaper_path = temp_path
+            else:
+                # Hard transitions - just get wallpaper for current period
+                wallpaper_path = wallpaper_source.get_wallpaper(current_period.value)
+
+            # Apply the wallpaper
+            if wallpaper_mgr.set_wallpaper(wallpaper_path):
+                logger.info(f"Applied wallpaper for {current_period.value}")
+            else:
+                logger.error("Failed to apply wallpaper")
+
+        except Exception as e:
+            logger.error(f"Error applying wallpaper: {e}", exc_info=True)
+
     def on_save_clicked(self, button):
         """Save configuration to file."""
         try:
@@ -947,6 +1026,9 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
                 self.config.longitude,
                 self.config.timezone
             )
+
+            # Apply wallpaper immediately
+            self._apply_current_wallpaper()
 
             # Store new original
             with open(self.config_path) as f:

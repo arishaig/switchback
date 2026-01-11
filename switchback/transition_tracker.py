@@ -81,26 +81,41 @@ class TransitionTracker:
 
     def get_transition_wallpapers(
         self,
-        current_period: TimePeriod
+        current_period: TimePeriod,
+        blend_ratio: float
     ) -> tuple[str, str]:
         """
         Get the FROM and TO wallpaper periods for current transition.
 
-        During each period, we gradually transition FROM the period's wallpaper
-        TO the next period's wallpaper.
+        During the first half of each period (ratio < 0.5), transition FROM
+        the previous period TO the current period.
+        During the second half (ratio >= 0.5), transition FROM current period
+        TO the next period.
 
         Args:
             current_period: Current TimePeriod
+            blend_ratio: Current blend ratio (0.0 to 1.0)
 
         Returns:
-            (from_period, to_period) strings
+            (from_period, to_period) strings, adjusted_ratio
         """
-        if current_period == TimePeriod.NIGHT:
-            # Night transitions TO morning
-            return ("night", "morning")
-        elif current_period == TimePeriod.MORNING:
-            # Morning transitions TO afternoon
-            return ("morning", "afternoon")
-        else:  # AFTERNOON
-            # Afternoon transitions TO night
-            return ("afternoon", "night")
+        if blend_ratio < 0.5:
+            # First half: blend FROM previous TO current
+            adjusted_ratio = blend_ratio * 2  # Scale 0.0-0.5 to 0.0-1.0
+
+            if current_period == TimePeriod.NIGHT:
+                return ("afternoon", "night", adjusted_ratio)
+            elif current_period == TimePeriod.MORNING:
+                return ("night", "morning", adjusted_ratio)
+            else:  # AFTERNOON
+                return ("morning", "afternoon", adjusted_ratio)
+        else:
+            # Second half: blend FROM current TO next
+            adjusted_ratio = (blend_ratio - 0.5) * 2  # Scale 0.5-1.0 to 0.0-1.0
+
+            if current_period == TimePeriod.NIGHT:
+                return ("night", "morning", adjusted_ratio)
+            elif current_period == TimePeriod.MORNING:
+                return ("morning", "afternoon", adjusted_ratio)
+            else:  # AFTERNOON
+                return ("afternoon", "night", adjusted_ratio)

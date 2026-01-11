@@ -1,11 +1,23 @@
 """Configuration loading and validation."""
 
 import os
+import re
 import yaml
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, Optional
 import pytz
+
+
+@dataclass
+class GeneratedConfig:
+    """Configuration for generated wallpaper mode."""
+
+    logo: Path
+    background_colors: Dict[str, str]
+    logo_colors: Dict[str, str]
+    logo_scale: float = 0.3
+    logo_position: str = "center"
 
 
 @dataclass
@@ -15,7 +27,9 @@ class Config:
     latitude: float
     longitude: float
     timezone: str
-    wallpapers: Dict[str, Path]
+    mode: str = "wallpaper"
+    wallpapers: Optional[Dict[str, Path]] = None
+    generated: Optional[GeneratedConfig] = None
     check_interval_fallback: int = 300
     preload_all: bool = True
     monitor: str = ""
@@ -76,28 +90,90 @@ class Config:
                 f"Must be a valid IANA timezone (e.g., 'US/Pacific', 'Europe/London')"
             )
 
-        # Validate wallpaper paths
-        wallpapers_data = data.get('wallpapers', {})
-        if not wallpapers_data:
-            raise ValueError("Missing required field: wallpapers")
+        # Get mode (default to "wallpaper" for backward compatibility)
+        mode = data.get('mode', 'wallpaper')
+        if mode not in ('wallpaper', 'generated'):
+            raise ValueError(f"Invalid mode: {mode}. Must be 'wallpaper' or 'generated'")
 
-        required_periods = {'night', 'morning', 'afternoon'}
-        missing_periods = required_periods - set(wallpapers_data.keys())
-        if missing_periods:
-            raise ValueError(f"Missing wallpaper configurations for: {', '.join(missing_periods)}")
+        # Validate mode-specific configuration
+        wallpapers = None
+        generated = None
 
-        wallpapers = {}
-        for period, path_str in wallpapers_data.items():
-            # Expand ~ and environment variables
-            expanded_path = os.path.expanduser(os.path.expandvars(path_str))
-            wp_path = Path(expanded_path)
+        if mode == 'wallpaper':
+            # Validate wallpaper paths
+            wallpapers_data = data.get('wallpapers', {})
+            if not wallpapers_data:
+                raise ValueError("Wallpaper mode requires 'wallpapers' section")
 
-            if not wp_path.exists():
-                raise ValueError(f"Wallpaper file not found for '{period}': {wp_path}")
-            if not wp_path.is_file():
-                raise ValueError(f"Wallpaper path for '{period}' is not a file: {wp_path}")
+            required_periods = {'night', 'morning', 'afternoon'}
+            missing_periods = required_periods - set(wallpapers_data.keys())
+            if missing_periods:
+                raise ValueError(f"Missing wallpaper configurations for: {', '.join(missing_periods)}")
 
-            wallpapers[period] = wp_path
+            wallpapers = {}
+            for period, path_str in wallpapers_data.items():
+                # Expand ~ and environment variables
+                expanded_path = os.path.expanduser(os.path.expandvars(path_str))
+                wp_path = Path(expanded_path)
+
+                if not wp_path.exists():
+                    raise ValueError(f"Wallpaper file not found for '{period}': {wp_path}")
+                if not wp_path.is_file():
+                    raise ValueError(f"Wallpaper path for '{period}' is not a file: {wp_path}")
+
+                wallpapers[period] = wp_path
+
+        elif mode == 'generated':
+            # Validate generated configuration
+            generated_data = data.get('generated', {})
+            if not generated_data:
+                raise ValueError("Generated mode requires 'generated' section")
+
+            # Validate logo path
+            logo_str = generated_data.get('logo')
+            if not logo_str:
+                raise ValueError("Generated mode requires 'logo' path")
+            logo_path = Path(os.path.expanduser(os.path.expandvars(logo_str)))
+            if not logo_path.exists():
+                raise ValueError(f"Logo file not found: {logo_path}")
+            if not logo_path.is_file():
+                raise ValueError(f"Logo path is not a file: {logo_path}")
+
+            # Validate background colors
+            bg_colors = generated_data.get('background_colors', {})
+            required_periods = {'night', 'morning', 'afternoon'}
+            if set(bg_colors.keys()) != required_periods:
+                raise ValueError(f"Generated mode requires background_colors for: {required_periods}")
+
+            for period, color in bg_colors.items():
+                if not re.match(r'^#[0-9a-fA-F]{6}$', color):
+                    raise ValueError(f"Invalid hex color for background {period}: {color}")
+
+            # Validate logo colors
+            logo_colors = generated_data.get('logo_colors', {})
+            if set(logo_colors.keys()) != required_periods:
+                raise ValueError(f"Generated mode requires logo_colors for: {required_periods}")
+
+            for period, color in logo_colors.items():
+                if not re.match(r'^#[0-9a-fA-F]{6}$', color):
+                    raise ValueError(f"Invalid hex color for logo {period}: {color}")
+
+            # Validate optional parameters
+            logo_scale = generated_data.get('logo_scale', 0.3)
+            if not (0.0 < logo_scale <= 1.0):
+                raise ValueError(f"Logo scale must be between 0.0 and 1.0, got: {logo_scale}")
+
+            logo_position = generated_data.get('logo_position', 'center')
+            if logo_position not in ('center', 'top', 'bottom'):
+                raise ValueError(f"Logo position must be 'center', 'top', or 'bottom', got: {logo_position}")
+
+            generated = GeneratedConfig(
+                logo=logo_path,
+                background_colors=bg_colors,
+                logo_colors=logo_colors,
+                logo_scale=logo_scale,
+                logo_position=logo_position
+            )
 
         # Optional settings
         settings = data.get('settings', {})
@@ -123,7 +199,9 @@ class Config:
             latitude=latitude,
             longitude=longitude,
             timezone=timezone,
+            mode=mode,
             wallpapers=wallpapers,
+            generated=generated,
             check_interval_fallback=settings.get('check_interval_fallback', 300),
             preload_all=settings.get('preload_all', True),
             monitor=settings.get('monitor', ''),

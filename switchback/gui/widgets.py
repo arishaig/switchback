@@ -1,7 +1,7 @@
 """Custom GTK4 widgets for Switchback GUI."""
 
 from pathlib import Path
-from gi.repository import Gtk, Gio, GdkPixbuf
+from gi.repository import Gtk, Gio, GdkPixbuf, Gdk
 
 
 class WallpaperChooser(Gtk.Box):
@@ -68,6 +68,8 @@ class WallpaperChooser(Gtk.Box):
         filter_images.add_pattern("*.jpg")
         filter_images.add_pattern("*.jpeg")
         filter_images.add_pattern("*.webp")
+        filter_images.add_pattern("*.svg")
+        filter_images.add_pattern("*.svgz")
         dialog.add_filter(filter_images)
 
         # Add all files filter
@@ -130,3 +132,100 @@ class WallpaperChooser(Gtk.Box):
         else:
             # Clear preview if no valid path
             self.preview.set_pixbuf(None)
+
+
+class ColorButton(Gtk.Box):
+    """Color picker button with hex color display."""
+
+    def __init__(self, initial_color="#000000", on_change_callback=None):
+        super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+
+        self.on_change_callback = on_change_callback
+
+        # Parse initial color
+        self._parse_color(initial_color)
+
+        # Color button
+        self.color_button = Gtk.ColorButton()
+        rgba = Gdk.RGBA()
+        rgba.parse(self.color)
+        self.color_button.set_rgba(rgba)
+        self.color_button.connect("color-set", self.on_color_set)
+
+        # Hex entry
+        self.hex_entry = Gtk.Entry()
+        self.hex_entry.set_text(self.color)
+        self.hex_entry.set_width_chars(8)
+        self.hex_entry.set_max_length(7)
+        self.hex_entry.connect("changed", self.on_hex_changed)
+
+        self.append(self.color_button)
+        self.append(self.hex_entry)
+
+    def _parse_color(self, color):
+        """Parse and validate hex color."""
+        if isinstance(color, str) and color.startswith('#') and len(color) == 7:
+            self.color = color.lower()
+        else:
+            self.color = "#000000"
+
+    def on_color_set(self, button):
+        """Called when color is selected from color picker."""
+        rgba = button.get_rgba()
+        # Convert RGBA to hex
+        r = int(rgba.red * 255)
+        g = int(rgba.green * 255)
+        b = int(rgba.blue * 255)
+        hex_color = f"#{r:02x}{g:02x}{b:02x}"
+
+        # Block hex_entry signal to avoid recursion
+        self.hex_entry.handler_block_by_func(self.on_hex_changed)
+        self.hex_entry.set_text(hex_color)
+        self.hex_entry.handler_unblock_by_func(self.on_hex_changed)
+
+        self.color = hex_color
+
+        if self.on_change_callback:
+            self.on_change_callback(self.color)
+
+    def on_hex_changed(self, entry):
+        """Called when hex entry is manually edited."""
+        text = entry.get_text()
+
+        # Validate hex color format
+        if len(text) == 7 and text.startswith('#'):
+            try:
+                int(text[1:], 16)  # Try to parse as hex
+                rgba = Gdk.RGBA()
+                if rgba.parse(text):
+                    # Valid color, update button
+                    self.color_button.handler_block_by_func(self.on_color_set)
+                    self.color_button.set_rgba(rgba)
+                    self.color_button.handler_unblock_by_func(self.on_color_set)
+
+                    self.color = text.lower()
+
+                    if self.on_change_callback:
+                        self.on_change_callback(self.color)
+            except ValueError:
+                pass  # Invalid hex, ignore
+
+    def get_color(self):
+        """Get current hex color."""
+        return self.color
+
+    def set_color(self, color):
+        """Set color from hex string."""
+        self._parse_color(color)
+
+        # Update button
+        rgba = Gdk.RGBA()
+        rgba.parse(self.color)
+        self.color_button.handler_block_by_func(self.on_color_set)
+        self.color_button.set_rgba(rgba)
+        self.color_button.handler_unblock_by_func(self.on_color_set)
+
+        # Update entry
+        self.hex_entry.handler_block_by_func(self.on_hex_changed)
+        self.hex_entry.set_text(self.color)
+        self.hex_entry.handler_unblock_by_func(self.on_hex_changed)

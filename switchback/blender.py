@@ -246,7 +246,7 @@ class BlendCache:
         cache_path = self.cache_dir / cache_key
 
         # Save image
-        image.save(cache_path, "JPEG", quality=95, optimize=True)
+        image.save(cache_path, "JPEG", quality=98, optimize=True, subsampling=0)
         logger.debug(f"Saved blend to cache: {cache_key}")
 
         # Update metadata

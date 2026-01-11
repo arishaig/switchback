@@ -1,7 +1,7 @@
 # Maintainer: Your Name <your.email@example.com>
 
 pkgname=switchback
-pkgver=1.0.0
+pkgver=1.1.0
 pkgrel=1
 pkgdesc="Solar-based dynamic wallpaper switcher for hyprpaper"
 arch=('any')
@@ -13,6 +13,7 @@ depends=(
     'python-yaml'
     'python-pytz'
     'python-pillow'
+    'python-cairosvg'
     'hyprpaper'
 )
 optdepends=(
@@ -54,4 +55,10 @@ package() {
     # Install README
     install -Dm644 README.md \
         "$pkgdir/usr/share/doc/$pkgname/README.md"
+
+    # Install logos
+    install -Dm644 switchback/logos/*.svg \
+        -t "$pkgdir/usr/share/switchback/logos/"
+    install -Dm644 switchback/logos/README.md \
+        "$pkgdir/usr/share/switchback/logos/README.md"
 }

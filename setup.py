@@ -23,12 +23,16 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/yourusername/switchback",  # Update with actual URL
     packages=find_packages(),
+    package_data={
+        "switchback": ["logos/*.svg", "logos/README.md"],
+    },
     python_requires=">=3.10",
     install_requires=[
         "astral>=3.2",
         "PyYAML>=6.0",
         "pytz>=2024.1",
         "Pillow>=10.0.0",
+        "cairosvg>=2.7.0",
     ],
     extras_require={
         "gui": [

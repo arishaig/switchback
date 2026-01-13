@@ -37,3 +37,11 @@ config.yaml
 
 # Logs
 *.log
+
+# Package artifacts
+*.tar.gz
+*.pkg.tar.zst
+*.pkg.tar.xz
+
+# Claude Code
+.claude/

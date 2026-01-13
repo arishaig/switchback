@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from switchback.config import Config, get_default_config_path
+from switchback.config import Config, get_default_config_path, create_default_config
 from switchback.sun_calculator import SunCalculator
 from switchback.wallpaper_manager import WallpaperManager
 from switchback.wallpaper_source import create_wallpaper_source, GeneratedWallpaperSource
@@ -335,36 +335,7 @@ def init_config():
             print("Aborted.")
             return
 
-    # Create config directory
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Simple template
-    template = """# Switchback configuration
-
-location:
-  latitude: 37.7749      # Your latitude
-  longitude: -122.4194   # Your longitude
-  timezone: "US/Pacific" # Your IANA timezone
-
-wallpapers:
-  night: ~/Pictures/backgrounds/night.jpg
-  morning: ~/Pictures/backgrounds/morning.jpg
-  afternoon: ~/Pictures/backgrounds/afternoon.jpg
-
-settings:
-  check_interval_fallback: 300  # Safety check interval (seconds)
-  preload_all: true             # Preload all wallpapers at startup
-  monitor: ""                   # Monitor name (empty = all monitors)
-
-  # Gradual wallpaper transitions (optional)
-  transitions:
-    enabled: false                # Enable gradual transitions between wallpapers
-    granularity: 3600             # How often to update wallpaper blend (seconds, default: 1 hour)
-    cache_blends: true            # Cache blended images for better performance
-    cache_dir: "~/.cache/switchback"  # Where to store cached blends
-"""
-
-    config_path.write_text(template)
+    create_default_config(config_path)
     print(f"Configuration template created at: {config_path}")
     print("\nPlease edit this file with your location and wallpaper paths.")
 

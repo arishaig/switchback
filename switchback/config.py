@@ -1,12 +1,17 @@
 """Configuration loading and validation."""
 
+import json
+import logging
 import os
 import re
+import urllib.request
 import yaml
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 import pytz
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -41,12 +46,13 @@ class Config:
     transitions_cache_dir: str = "~/.cache/switchback"
 
     @classmethod
-    def load(cls, config_path: Path) -> "Config":
+    def load(cls, config_path: Path, validate_paths: bool = True) -> "Config":
         """
         Load and validate configuration from YAML file.
 
         Args:
             config_path: Path to configuration file
+            validate_paths: If True, validate that wallpaper/logo files exist
 
         Returns:
             Config instance
@@ -116,10 +122,11 @@ class Config:
                 expanded_path = os.path.expanduser(os.path.expandvars(path_str))
                 wp_path = Path(expanded_path)
 
-                if not wp_path.exists():
-                    raise ValueError(f"Wallpaper file not found for '{period}': {wp_path}")
-                if not wp_path.is_file():
-                    raise ValueError(f"Wallpaper path for '{period}' is not a file: {wp_path}")
+                if validate_paths:
+                    if not wp_path.exists():
+                        raise ValueError(f"Wallpaper file not found for '{period}': {wp_path}")
+                    if not wp_path.is_file():
+                        raise ValueError(f"Wallpaper path for '{period}' is not a file: {wp_path}")
 
                 wallpapers[period] = wp_path
 
@@ -134,10 +141,11 @@ class Config:
             if not logo_str:
                 raise ValueError("Generated mode requires 'logo' path")
             logo_path = Path(os.path.expanduser(os.path.expandvars(logo_str)))
-            if not logo_path.exists():
-                raise ValueError(f"Logo file not found: {logo_path}")
-            if not logo_path.is_file():
-                raise ValueError(f"Logo path is not a file: {logo_path}")
+            if validate_paths:
+                if not logo_path.exists():
+                    raise ValueError(f"Logo file not found: {logo_path}")
+                if not logo_path.is_file():
+                    raise ValueError(f"Logo path is not a file: {logo_path}")
 
             # Validate background colors
             bg_colors = generated_data.get('background_colors', {})
@@ -220,3 +228,62 @@ def get_default_config_path() -> Path:
     """Get the default configuration file path."""
     xdg_config_home = os.environ.get('XDG_CONFIG_HOME', os.path.expanduser('~/.config'))
     return Path(xdg_config_home) / 'switchback' / 'config.yaml'
+
+
+def get_location_from_ip() -> Tuple[float, float, str]:
+    """Detect user's location via IP geolocation.
+
+    Returns:
+        Tuple of (latitude, longitude, timezone)
+
+    Raises:
+        Exception: If geolocation fails
+    """
+    url = "http://ip-api.com/json/?fields=lat,lon,timezone"
+    with urllib.request.urlopen(url, timeout=5) as response:
+        data = json.loads(response.read().decode())
+        return data['lat'], data['lon'], data['timezone']
+
+
+def create_default_config(config_path: Path) -> None:
+    """Create a default configuration template file.
+
+    Args:
+        config_path: Path where the config file should be created
+    """
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Try to detect location automatically
+    try:
+        lat, lon, tz = get_location_from_ip()
+        logger.info(f"Detected location: {lat}, {lon}, {tz}")
+    except Exception as e:
+        logger.warning(f"Could not detect location: {e}, using defaults")
+        lat, lon, tz = 37.7749, -122.4194, "US/Pacific"
+
+    template = f"""# Switchback configuration
+
+location:
+  latitude: {lat}
+  longitude: {lon}
+  timezone: "{tz}"
+
+wallpapers:
+  night: ~/Pictures/backgrounds/night.jpg
+  morning: ~/Pictures/backgrounds/morning.jpg
+  afternoon: ~/Pictures/backgrounds/afternoon.jpg
+
+settings:
+  check_interval_fallback: 300  # Safety check interval (seconds)
+  preload_all: true             # Preload all wallpapers at startup
+  monitor: ""                   # Monitor name (empty = all monitors)
+
+  # Gradual wallpaper transitions (optional)
+  transitions:
+    enabled: false                # Enable gradual transitions between wallpapers
+    granularity: 3600             # How often to update wallpaper blend (seconds, default: 1 hour)
+    cache_blends: true            # Cache blended images for better performance
+    cache_dir: "~/.cache/switchback"  # Where to store cached blends
+"""
+
+    config_path.write_text(template)

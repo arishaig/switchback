@@ -6,7 +6,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 from gi.repository import Gtk, GLib, GObject
-from switchback.config import Config, get_default_config_path
+from switchback.config import Config, get_default_config_path, create_default_config
 from switchback.sun_calculator import SunCalculator
 from switchback.time_period import get_current_period, TimePeriod
 from switchback.wallpaper_manager import WallpaperManager
@@ -43,13 +43,30 @@ class SwitchbackWindow(Gtk.ApplicationWindow):
                 self.original_config_data = f.read()
 
         except FileNotFoundError:
-            self.show_error_dialog(
-                "Configuration file not found",
-                f"Please create a configuration file at:\n{self.config_path}\n\n"
-                f"You can use 'switchback init' to create a template."
-            )
+            create_default_config(self.config_path)
+            logger.info(f"Created default configuration at {self.config_path}")
+            # Load the newly created config without path validation
+            self._load_config_relaxed()
+        except ValueError:
+            # Config exists but has invalid paths - load without path validation
+            logger.info("Config has invalid paths, loading without validation")
+            self._load_config_relaxed()
         except Exception as e:
             self.show_error_dialog("Error loading configuration", str(e))
+
+    def _load_config_relaxed(self):
+        """Load config without validating that wallpaper/logo paths exist."""
+        try:
+            self.config = Config.load(self.config_path, validate_paths=False)
+            self.sun_calc = SunCalculator(
+                self.config.latitude,
+                self.config.longitude,
+                self.config.timezone
+            )
+            with open(self.config_path) as f:
+                self.original_config_data = f.read()
+        except Exception as e:
+            logger.warning(f"Could not load config: {e}")
 
         # Build UI
         self.build_ui()
